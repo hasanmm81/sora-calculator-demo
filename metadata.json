@@ -1,0 +1,6 @@
+{
+  "name": "SORA Loan Calculator Singapore",
+  "description": "Calculate mortgage and loan interest payments using MAS-backed Singapore Overnight Rate Average (SORA) benchmarks with compounded rates, bank margins, stress tests, and amortization schedules.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
