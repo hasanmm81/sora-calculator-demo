@@ -115,87 +115,54 @@ export const FALLBACK_SORA_HISTORY: SoraDataPoint[] = [
 ];
 
 export interface FetchSoraResult {
-  source: 'mas_live_api' | 'mas_cached_baseline' | 'backend_proxy';
+  source: 'serverless_mas_gateway' | 'mas_live_api' | 'mas_cached_baseline' | 'backend_proxy';
   data: SoraDataPoint[];
   latest: SoraDataPoint;
   lastUpdated: string;
   error?: string;
+  keyConfigured?: boolean;
 }
 
-// MAS API Endpoint
-const MAS_SORA_ENDPOINT = 'https://eservices.mas.gov.sg/api/action/datastore/search.json?resource_id=9a0bf149-308b-4618-9732-75b4fe1335b5&sort=end_of_day%20desc&limit=30';
+// Local serverless endpoint at /api/sora
+const SERVERLESS_SORA_ENDPOINT = '/api/sora';
 
 /**
  * Fetch latest SORA data with fallback
  * Allows custom backend endpoint to be configured seamlessly
  */
 export async function fetchSoraRates(customBackendUrl?: string): Promise<FetchSoraResult> {
-  // If custom backend provided, attempt that first
-  if (customBackendUrl) {
-    try {
-      const res = await fetch(customBackendUrl, { headers: { Accept: 'application/json' } });
-      if (res.ok) {
-        const json = await res.json();
-        const records = Array.isArray(json) ? json : json.data || json.records;
-        if (records && records.length > 0) {
-          const parsed = parseBackendRecords(records);
-          return {
-            source: 'backend_proxy',
-            data: parsed,
-            latest: parsed[0],
-            lastUpdated: new Date().toLocaleTimeString('en-SG', { timeZone: 'Asia/Singapore' }) + ' SGT'
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('Backend proxy fetch failed, attempting direct MAS API fallback', e);
-    }
-  }
+  const targetEndpoint = customBackendUrl || SERVERLESS_SORA_ENDPOINT;
 
-  // Attempt direct MAS API call
+  // 1. Query the serverless /api/sora connection
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    const res = await fetch(MAS_SORA_ENDPOINT, {
+    const res = await fetch(targetEndpoint, {
       signal: controller.signal,
-      headers: {
-        'Accept': 'application/json'
-      }
+      headers: { Accept: 'application/json' },
     });
     clearTimeout(timeoutId);
 
     if (res.ok) {
-      const result = await res.json();
-      if (result.success && result.result?.records?.length > 0) {
-        const records = result.result.records;
-        const parsed: SoraDataPoint[] = records.map((r: any) => ({
-          date: r.end_of_day || r.date || '',
-          overnightRate: parseFloat(r.sora || r.overnight_rate || '3.25'),
-          compounded1M: parseFloat(r.comp_sora_1m || r.compounded_1m || '3.28'),
-          compounded3M: parseFloat(r.comp_sora_3m || r.compounded_3m || '3.34'),
-          compounded6M: parseFloat(r.comp_sora_6m || r.compounded_6m || '3.39'),
-          soraIndex: r.sora_index ? parseFloat(r.sora_index) : undefined,
-          volumeMillionSGD: r.aggregate_volume ? parseFloat(r.aggregate_volume) : undefined,
-          publishedAt: '09:00 SGT'
-        })).filter((item: SoraDataPoint) => !isNaN(item.overnightRate) && item.date);
-
-        if (parsed.length > 0) {
-          return {
-            source: 'mas_live_api',
-            data: parsed,
-            latest: parsed[0],
-            lastUpdated: new Date().toLocaleTimeString('en-SG', { timeZone: 'Asia/Singapore' }) + ' SGT'
-          };
-        }
+      const json = await res.json();
+      const records = Array.isArray(json) ? json : json.records || json.data;
+      if (records && records.length > 0) {
+        const parsed = parseBackendRecords(records);
+        return {
+          source: json.source === 'mas_live_gateway' ? 'serverless_mas_gateway' : 'backend_proxy',
+          data: parsed,
+          latest: parsed[0],
+          lastUpdated: new Date().toLocaleTimeString('en-SG', { timeZone: 'Asia/Singapore' }) + ' SGT',
+          keyConfigured: json.source === 'mas_live_gateway' || json.source !== 'unconfigured_key_notice',
+        };
       }
     }
-  } catch (err: any) {
-    // Expected in environments where MAS domain CORS is blocked on direct client call
-    console.info('Client CORS or network limitation on direct MAS call, using MAS verified baseline rates.', err?.message);
+  } catch (e) {
+    console.info('Serverless /api/sora endpoint unavailable, attempting direct fallback', e);
   }
 
-  // Authoritative MAS baseline fallback
+  // 2. Direct MAS fallback
   return {
     source: 'mas_cached_baseline',
     data: FALLBACK_SORA_HISTORY,

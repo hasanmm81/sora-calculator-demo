@@ -45,13 +45,25 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center flex-wrap gap-2 text-xs">
             {/* Live Data Badge */}
             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300">
-              <span className={`w-2 h-2 rounded-full ${soraMeta.source === 'mas_live_api' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  soraMeta.source === 'serverless_mas_gateway'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : soraMeta.source === 'mas_live_api'
+                    ? 'bg-emerald-400'
+                    : 'bg-amber-400'
+                }`}
+              />
               <span className="font-mono text-[11px] text-slate-300">
                 {soraMeta.latest.date}
               </span>
               <span aria-hidden="true" className="text-slate-600">·</span>
               <span className="text-slate-400">
-                {soraMeta.source === 'mas_live_api' ? 'Live MAS API' : 'MAS Baseline'}
+                {soraMeta.source === 'serverless_mas_gateway'
+                  ? 'Serverless MAS Gateway'
+                  : soraMeta.source === 'mas_live_api'
+                  ? 'Live MAS API'
+                  : 'MAS Baseline'}
               </span>
             </div>
 
